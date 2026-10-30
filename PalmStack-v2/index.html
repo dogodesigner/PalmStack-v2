@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#71518f">
+  <meta name="description" content="بالم ستاك — تحدّي أربع قطع على خط واحد، بتصميم ورسوم دانة التميمي.">
+  <title>بالم ستاك | Palm Stack</title>
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./game.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">انتقل إلى اللعبة</a>
+  <div class="side-art side-art--left" aria-hidden="true"><img id="side-left-image" alt="" hidden></div>
+  <div class="side-art side-art--right" aria-hidden="true"><img id="side-right-image" alt="" hidden></div>
+  <div class="app-shell">
+    <header class="app-header">
+      <h1 class="wordmark">بالم ستاك <span lang="en" dir="ltr">Palm Stack</span></h1>
+      <div class="header-actions">
+        <button id="leaderboard-button" class="button button--quiet" type="button">لوحة الصدارة</button>
+        <button id="sound-toggle" class="button button--quiet" type="button" aria-pressed="true">الصوت يعمل؟</button>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section id="start-screen" class="screen start-screen" aria-labelledby="welcome-title">
+        <figure class="start-art">
+          <img id="hero-image" class="hero-image" alt="الكرة الزجاجية السعودية من رسم دانة التميمي" hidden>
+          <div id="hero-fallback" class="hero-fallback" aria-hidden="true">
+            <div class="glass-orb"><div class="orb-pieces"><i></i><i></i><i></i><i></i></div></div>
+            <div class="orb-base"></div><p>قد التحدي؟</p>
+          </div>
+          <figcaption class="artist-signature">
+            <img id="signature-image" class="signature" alt="دانة التميمي — توقيع بخط اليد" hidden>
+            <span id="signature-fallback">دانة التميمي</span>
+          </figcaption>
+        </figure>
+        <div class="start-content glass-card">
+          <p class="eyebrow">أنت ضد الكمبيوتر</p>
+          <h2 id="welcome-title">جاهز تلعب؟<br>نشوف شطارتك!</h2>
+          <p class="intro">كمَل أربع قطع على خط واحد، وخلّ التحدّي يبدأ.</p>
+          <form id="start-form" class="start-form">
+            <label for="player-name">اسمك أو لقبك <span>(اختياري)</span></label>
+            <input id="player-name" type="text" maxlength="24" autocomplete="off" dir="auto"
+              placeholder="مثلاً دانة" aria-describedby="name-help">
+            <p id="name-help" class="field-help">تأكد تكتب اسمك عشان يطلع أفضل فوز لك في لوحة الصدارة.</p>
+            <label for="difficulty-select">المستوى</label>
+            <select id="difficulty-select">
+              <option value="easy">بسيط</option><option value="medium">وسط</option><option value="hard">مستحيل</option>
+            </select>
+            <button class="button button--primary start-button" type="submit">نبدأ اللعب</button>
+          </form>
+          <details class="how-to-play">
+            <summary>كيف ألعب؟</summary>
+            <ol>
+              <li>اختر عمودًا؛ قطعتك تنزل إلى آخر مكان فارغ فيه.</li>
+              <li>الكمبيوتر يلعب بعدك. وصّل أربع قطع أفقيًا أو عموديًا أو قطريًا لتفوز.</li>
+              <li>إذا امتلأت اللوحة بدون فائز، تنتهي الجولة بالتعادل.</li>
+            </ol>
+            <p>تبدأ أنت أول جولة، ثم تتبادل البداية مع الكمبيوتر. تغيير المستوى يبدأ تحدّيًا جديدًا.</p>
+          </details>
+        </div>
+      </section>
+
+      <section id="game-screen" class="screen game-screen" aria-labelledby="game-title" hidden>
+        <div class="game-heading">
+          <p class="eyebrow">المستوى: <span id="round-level">بسيط</span></p>
+          <h2 id="game-title" tabindex="-1">مساحة التحدّي</h2>
+          <p id="turn-status" class="turn-status" role="status" aria-atomic="true"></p>
+        </div>
+        <div class="play-layout">
+          <div class="board-area">
+            <div class="round-meta">
+              <span>نقلاتك <strong id="move-count">٠</strong></span>
+              <span>وقت تفكيرك <strong id="player-time" dir="ltr">00:00</strong></span>
+            </div>
+            <p id="board-help" class="board-help">اختر رقم العمود لإسقاط قطعتك</p>
+            <div id="board-shell" class="board-shell" dir="ltr">
+              <div id="column-controls" class="column-controls" role="group" aria-label="اختر عمودًا" aria-describedby="board-help"></div>
+              <div id="game-board" class="game-board" role="table" aria-label="لوحة من ستة صفوف وسبعة أعمدة"></div>
+              <div id="celebration-layer" class="celebration-layer" aria-hidden="true"></div>
+            </div>
+            <div class="player-legend">
+              <span><i class="player-mark player-mark--human" aria-hidden="true"></i>قطعك: خزامى</span>
+              <span><i class="player-mark player-mark--computer" aria-hidden="true"></i>الكمبيوتر: ذهبي</span>
+            </div>
+          </div>
+
+          <aside class="game-sidebar glass-card" aria-label="نتائج الجولة وأدوات اللعب">
+            <dl class="scoreboard" aria-label="نتائج التحدي الحالي">
+              <div class="score-card score-card--human"><dt><bdi id="human-name">أنت</bdi></dt><dd id="human-score">٠</dd></div>
+              <div class="score-card"><dt>تعادل</dt><dd id="draw-score">٠</dd></div>
+              <div class="score-card score-card--computer"><dt>الكمبيوتر</dt><dd id="computer-score">٠</dd></div>
+            </dl>
+            <p id="game-error" class="notice notice--error" role="alert" hidden></p>
+            <section id="result-panel" class="result-panel" aria-labelledby="result-title" hidden>
+              <span class="victory-spark" aria-hidden="true">✦</span>
+              <h3 id="result-title" tabindex="-1"></h3>
+              <p id="result-message"></p><p id="record-message" class="record-message"></p>
+            </section>
+            <div class="game-actions">
+              <button id="new-round-button" class="button button--primary" type="button">جولة جديدة</button>
+              <button id="change-level-button" class="button button--secondary" type="button">تغيير المستوى</button>
+              <button id="new-player-button" class="button button--quiet" type="button">لاعب جديد</button>
+            </div>
+            <details class="ai-details">
+              <summary>كيف يفكّر الكمبيوتر؟</summary>
+              <p>يقارن النقلات باستخدام <bdi lang="en">Minimax</bdi> مع تقليم <bdi lang="en">Alpha-Beta</bdi>. المستوى يحدد عمق البحث، وهذا البحث المحدود لا يضمن أفضل نقلة دائمًا.</p>
+              <dl class="search-stats">
+                <div><dt>عمق البحث</dt><dd id="stat-depth">—</dd></div>
+                <div><dt>الحالات التي فحصها</dt><dd id="stat-nodes">—</dd></div>
+                <div><dt>مرّات التقليم</dt><dd id="stat-cutoffs">—</dd></div>
+                <div><dt>زمن البحث</dt><dd id="stat-time">—</dd></div>
+              </dl>
+              <p class="field-help">إحصاءات آخر نقلة. زمن البحث لا يشمل حركة القطعة، ومرّات التقليم ليست عدد الحالات المتجاوزة.</p>
+            </details>
+          </aside>
+        </div>
+      </section>
+      <noscript><p class="notice">فعّل JavaScript في المتصفح لتشغيل اللعبة.</p></noscript>
+    </main>
+
+    <footer class="app-footer">
+      <p>تصميم ورسوم دانة التميمي</p>
+      <p class="copyright">© <span id="copyright-year">2026</span> دانة التميمي — جميع الحقوق محفوظة</p>
+    </footer>
+  </div>
+
+  <dialog id="leaderboard-dialog" class="leaderboard-dialog" aria-labelledby="leaderboard-title">
+    <div class="dialog-heading"><div><p class="eyebrow">إنجازاتكم يا أبطال!</p><h2 id="leaderboard-title">لوحة الصدارة</h2></div>
+      <button id="close-leaderboard" class="button button--quiet" type="button" autofocus>إغلاق</button></div>
+    <p class="leaderboard-intro">أفضل فوز لكل اسم. الترتيب بأقل نقلات، ثم أقل وقت تفكير للاعب.</p>
+    <div class="leaderboard-filters">
+      <div><label for="leaderboard-level">المستوى</label><select id="leaderboard-level"><option value="easy">بسيط</option><option value="medium">وسط</option><option value="hard">مستحيل</option></select></div>
+      <div><label for="leaderboard-starter">من بدأ الجولة؟</label><select id="leaderboard-starter"><option value="human">اللاعب</option><option value="computer">الكمبيوتر</option></select></div>
+    </div>
+    <p id="leaderboard-empty" class="empty-state">المكان ينتظر أول فوز… يمكن يكون باسمك!</p>
+    <div id="leaderboard-table-wrap" class="table-wrap" hidden>
+      <table><caption class="sr-only">أفضل عشرة انتصارات للفئة المختارة</caption><thead><tr><th scope="col">المركز</th><th scope="col">الاسم</th><th scope="col">النقلات</th><th scope="col">الوقت</th></tr></thead><tbody id="leaderboard-rows"></tbody></table>
+    </div>
+    <p class="field-help">محفوظة على هذا المتصفح فقط. تغيير المستوى أو صاحب البداية يعرض قائمة مستقلة. الوقت يستبعد تفكير الكمبيوتر وحركة القطع، ويتوقف عند إخفاء الصفحة أو فتح هذه اللوحة.</p>
+    <p id="storage-notice" class="notice" role="status" hidden>تعذّر الحفظ على هذا المتصفح. النتائج متاحة لهذه الجلسة فقط.</p>
+  </dialog>
+</body>
+</html>

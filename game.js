@@ -23,13 +23,24 @@ const ui = {
   filterStarter: byId("leaderboard-starter"), rows: byId("leaderboard-rows"),
   empty: byId("leaderboard-empty"), table: byId("leaderboard-table-wrap"),
   storageNotice: byId("storage-notice"),
+  errorMessage: byId("game-error-message"), retryMove: byId("retry-move-button"),
+  winControls: byId("win-audio-controls"), winPlay: byId("win-play-button"),
+  winPause: byId("win-pause-button"), winMute: byId("win-mute-button"),
+  winStatus: byId("win-audio-status"), audioNotice: byId("audio-notice"),
+  mediaNotice: byId("media-notice"), retryMedia: byId("retry-media-button"),
 };
 
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const numbers = new Intl.NumberFormat("ar-SA", { maximumFractionDigits: 1 });
 const store = createStore();
-const sound = new SoundBank(store.settings.sound);
-const effects = new Celebration(byId("celebration-layer"), ui.shell, reducedMotion);
+const sound = new SoundBank(store.settings.sound, {
+  onWinChange: renderWinSound,
+  onNotice: (message) => {
+    ui.audioNotice.textContent = message;
+    ui.audioNotice.hidden = !message;
+  },
+});
+const effects = new Celebration(byId("celebration-layer"), ui.shell, reducedMotion, ui.result, ui.newRound);
 const scores = { human: 0, computer: 0, draw: 0 };
 const state = {
   board: createBoard(), phase: "start", name: "", level: store.settings.level,
@@ -42,6 +53,8 @@ let clockTimer = null;
 let cancelDrop = null;
 let cells = [];
 let columnButtons = [];
+const failedImages = new Map();
+let imageRetry = 0;
 
 function formatTime(milliseconds) {
   const seconds = Math.floor(Math.max(0, milliseconds) / 1000);
@@ -168,7 +181,9 @@ function startRound() {
   state.thinkingMs = 0;
   state.lastHumanColumn = 3;
   ui.error.hidden = true;
-  ui.error.textContent = "";
+  ui.errorMessage.textContent = "";
+  ui.winControls.hidden = true;
+  ui.audioNotice.hidden = true;
   ui.result.hidden = true;
   ui.result.classList.remove("is-human-win");
   ui.recordMessage.textContent = "";
@@ -264,8 +279,9 @@ function requestComputerMove(currentRound) {
     state.phase = "error";
     updateControls();
     ui.status.textContent = "توقفت الجولة مؤقتًا";
-    ui.error.textContent = "تعذّر إكمال نقلة الكمبيوتر. جرّب جولة جديدة.";
+    ui.errorMessage.textContent = "تعذّر إكمال نقلة الكمبيوتر. اللوحة محفوظة؛ حاول مرة أخرى لإكمال الجولة.";
     ui.error.hidden = false;
+    ui.retryMove.focus({ preventScroll: true });
     console.error("Computer move failed:", error);
   };
   try {
@@ -327,6 +343,7 @@ function finishRound(result) {
   clearInterval(clockTimer);
   state.phase = "finished";
   updateControls();
+  ui.result.hidden = false;
   if (result.status === "draw") {
     scores.draw++;
     ui.resultTitle.textContent = COPY.draw;
@@ -334,6 +351,7 @@ function finishRound(result) {
     sound.play("draw");
   } else {
     const humanWon = result.winner === HUMAN;
+    ui.winControls.hidden = !humanWon;
     scores[humanWon ? "human" : "computer"]++;
     ui.resultTitle.textContent = humanWon ? COPY.humanWin : COPY.computerWin;
     ui.resultMessage.textContent = humanWon ? COPY.humanWinMessage : COPY.computerWinMessage;
@@ -382,6 +400,28 @@ function updateSoundButton() {
   ui.sound.setAttribute("aria-pressed", String(sound.enabled));
   ui.sound.textContent = sound.enabled ? "الصوت يعمل" : "الصوت مكتوم";
   ui.sound.setAttribute("aria-label", sound.enabled ? "كتم الصوت" : "تشغيل الصوت");
+  renderWinSound();
+}
+
+function renderWinSound() {
+  const status = sound.winState;
+  const labels = {
+    idle: "جاهز للتشغيل", loading: "جارٍ التشغيل…", playing: "يعمل الآن",
+    paused: "متوقف مؤقتًا", ended: "انتهى المقطع", error: "الصوت غير متاح",
+  };
+  ui.winStatus.textContent = labels[status] + (sound.enabled ? "" : " · مكتوم");
+  ui.winPlay.disabled = status === "playing" || status === "loading";
+  ui.winPlay.textContent = status === "paused" ? "استكمال" : status === "ended" ? "إعادة التشغيل" : "تشغيل";
+  ui.winPause.disabled = status !== "playing" && status !== "loading";
+  ui.winMute.setAttribute("aria-pressed", String(!sound.enabled));
+  ui.winMute.setAttribute("aria-label", sound.enabled ? "كتم جميع أصوات اللعبة" : "إلغاء كتم أصوات اللعبة");
+  ui.winMute.textContent = sound.enabled ? "كتم" : "إلغاء الكتم";
+}
+
+function toggleSound() {
+  sound.setEnabled(!sound.enabled);
+  updateSoundButton();
+  store.saveSettings({ sound: sound.enabled });
 }
 
 function returnToStart(clearName) {
@@ -402,11 +442,15 @@ function loadImage(id, path, fallbackId) {
   image.addEventListener("load", () => {
     image.hidden = false;
     if (fallback) fallback.hidden = true;
-  }, { once: true });
+    failedImages.delete(id);
+    ui.mediaNotice.hidden = failedImages.size === 0;
+  });
   image.addEventListener("error", () => {
     image.hidden = true;
     if (fallback) fallback.hidden = false;
-  }, { once: true });
+    failedImages.set(id, { image, path });
+    ui.mediaNotice.hidden = false;
+  });
   image.src = path;
 }
 
@@ -431,11 +475,35 @@ ui.newRound.addEventListener("click", () => {
 });
 ui.newPlayer.addEventListener("click", () => returnToStart(true));
 ui.changeLevel.addEventListener("click", () => returnToStart(false));
-ui.sound.addEventListener("click", () => {
-  sound.setEnabled(!sound.enabled);
-  updateSoundButton();
-  store.saveSettings({ sound: sound.enabled });
-  sound.play("click");
+ui.sound.addEventListener("click", toggleSound);
+ui.winMute.addEventListener("click", toggleSound);
+ui.winPlay.addEventListener("click", () => {
+  if (state.phase !== "finished" || ui.winControls.hidden) return;
+  if (!sound.enabled) {
+    sound.setEnabled(true);
+    updateSoundButton();
+    store.saveSettings({ sound: true });
+  }
+  void sound.playWin();
+});
+ui.winPause.addEventListener("click", () => sound.pauseWin());
+ui.retryMove.addEventListener("click", () => {
+  if (state.phase !== "error") return;
+  ui.error.hidden = true;
+  state.phase = "thinking";
+  updateControls();
+  clearInterval(clockTimer);
+  clockTimer = setInterval(renderClock, 1000);
+  ui.gameTitle.focus({ preventScroll: true });
+  requestComputerMove(state.roundId);
+});
+ui.retryMedia.addEventListener("click", () => {
+  imageRetry++;
+  for (const { image, path } of failedImages.values()) {
+    const url = new URL(path, import.meta.url);
+    url.searchParams.set("retry", String(imageRetry));
+    image.src = url.href;
+  }
 });
 
 ui.openLeaderboard.addEventListener("click", () => {
@@ -470,7 +538,7 @@ ui.controls.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { stopClock(); sound.stopAll(); effects.clear(); }
+  if (document.hidden) { stopClock(); sound.pauseForVisibility(); effects.clear(); }
   else startClock();
 });
 reducedMotion.addEventListener("change", () => { if (reducedMotion.matches) effects.clear(); });

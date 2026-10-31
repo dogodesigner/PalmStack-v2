@@ -1,17 +1,17 @@
 // All presentation choices live here, independently of the search algorithm.
 export const LEVELS = Object.freeze({
-  easy: Object.freeze({ label: "سهل", depth: 2 }),
-  medium: Object.freeze({ label: "متوسط", depth: 4 }),
-  hard: Object.freeze({ label: "صعب", depth: 6 }),
+  easy: Object.freeze({ label: "بسيط", depth: 1 }),
+  medium: Object.freeze({ label: "وسط", depth: 4 }),
+  hard: Object.freeze({ label: "مستحيل", depth: 6 }),
 });
 
 export const DEFAULT_LEVEL = "easy";
 
 export const MEDIA = Object.freeze({
-  // Add the agreed images later. Empty paths make no network requests.
-  hero: "",
-  sideLeft: "",
-  sideRight: "",
+  // Original transparent artwork. Keep relative paths for GitHub Pages.
+  hero: "./assets/globe.png",
+  sideLeft: "./assets/corner-pattern.png",
+  sideRight: "./assets/corner-pattern.png",
   signature: "./assets/signature.png",
 });
 

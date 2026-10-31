@@ -8,7 +8,7 @@
   <title>بالم ستاك | Palm Stack</title>
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./styles.css">
-  <script type="module" src="./game.js"></script>
+  <script defer src="./bootstrap.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">انتقل إلى اللعبة</a>
@@ -18,18 +18,29 @@
     <header class="app-header">
       <h1 class="wordmark">بالم ستاك <span lang="en" dir="ltr">Palm Stack</span></h1>
       <div class="header-actions">
-        <button id="leaderboard-button" class="button button--quiet" type="button">لوحة الصدارة</button>
-        <button id="sound-toggle" class="button button--quiet" type="button" aria-pressed="true">الصوت يعمل؟</button>
+        <button id="leaderboard-button" disabled class="button button--quiet" type="button">لوحة الصدارة</button>
+        <button id="sound-toggle" disabled class="button button--quiet" type="button" aria-pressed="true">الصوت يعمل</button>
       </div>
     </header>
 
+    <div class="app-notices">
+      <div id="startup-notice" class="notice startup-notice" role="status" aria-atomic="true">
+        <p id="startup-message">جارٍ تجهيز اللعبة…</p>
+        <button id="reload-button" class="button button--secondary" type="button" hidden>إعادة تحميل الصفحة</button>
+      </div>
+      <p id="connection-notice" class="notice notice--connection" role="status" hidden>يبدو أن الاتصال انقطع. قد يتعذّر تحميل بعض الملفات؛ يمكنك متابعة اللعب إذا كانت جاهزة.</p>
+      <div id="media-notice" class="notice notice--media" role="status" aria-atomic="true" hidden>
+        <p>تعذّر تحميل بعض الرسومات. يمكنك متابعة اللعب أو إعادة تحميلها.</p>
+        <button id="retry-media-button" class="button button--quiet" type="button">إعادة تحميل الرسومات</button>
+      </div>
+    </div>
     <main id="main-content">
       <section id="start-screen" class="screen start-screen" aria-labelledby="welcome-title">
         <figure class="start-art">
-          <img id="hero-image" class="hero-image" alt="الكرة الزجاجية السعودية من رسم دانة التميمي" hidden>
-          <div id="hero-fallback" class="hero-fallback" aria-hidden="true">
-            <div class="glass-orb"><div class="orb-pieces"><i></i><i></i><i></i><i></i></div></div>
-            <div class="orb-base"></div><p>قد التحدي؟</p>
+          <img id="hero-image" width="2048" height="2048" fetchpriority="high" class="hero-image" alt="الكرة الزجاجية السعودية من رسم دانة التميمي" hidden>
+          <div id="hero-fallback" class="hero-fallback" hidden>
+            <span aria-hidden="true">✦</span><p>رسمة دانة</p>
+            <small>يمكنك بدء اللعب أثناء تحميل الصورة.</small>
           </div>
           <figcaption class="artist-signature">
             <img id="signature-image" class="signature" alt="دانة التميمي — توقيع بخط اليد" hidden>
@@ -49,7 +60,7 @@
             <select id="difficulty-select">
               <option value="easy">بسيط</option><option value="medium">وسط</option><option value="hard">مستحيل</option>
             </select>
-            <button class="button button--primary start-button" type="submit">نبدأ اللعب</button>
+            <button id="start-button" disabled class="button button--primary start-button" type="submit">نبدأ اللعب</button>
           </form>
           <details class="how-to-play">
             <summary>كيف ألعب؟</summary>
@@ -93,11 +104,23 @@
               <div class="score-card"><dt>تعادل</dt><dd id="draw-score">٠</dd></div>
               <div class="score-card score-card--computer"><dt>الكمبيوتر</dt><dd id="computer-score">٠</dd></div>
             </dl>
-            <p id="game-error" class="notice notice--error" role="alert" hidden></p>
+            <div id="game-error" class="notice notice--error" hidden>
+              <p id="game-error-message" role="alert"></p>
+              <button id="retry-move-button" class="button button--secondary" type="button">إعادة المحاولة</button>
+            </div>
             <section id="result-panel" class="result-panel" aria-labelledby="result-title" hidden>
               <span class="victory-spark" aria-hidden="true">✦</span>
               <h3 id="result-title" tabindex="-1"></h3>
               <p id="result-message"></p><p id="record-message" class="record-message"></p>
+              <div id="win-audio-controls" class="win-audio" role="group" aria-label="التحكم بصوت الفوز" hidden>
+                <p class="win-audio-heading">صوت الفوز <span id="win-audio-status" role="status" aria-atomic="true">جاهز للتشغيل</span></p>
+                <div class="win-audio-buttons">
+                  <button id="win-play-button" class="button button--secondary" type="button">تشغيل</button>
+                  <button id="win-pause-button" class="button button--quiet" type="button" disabled>إيقاف مؤقت</button>
+                  <button id="win-mute-button" class="button button--quiet" type="button" aria-pressed="false">كتم</button>
+                </div>
+                <p id="audio-notice" class="audio-notice" role="status" hidden></p>
+              </div>
             </section>
             <div class="game-actions">
               <button id="new-round-button" class="button button--primary" type="button">جولة جديدة</button>
@@ -139,7 +162,9 @@
     <div id="leaderboard-table-wrap" class="table-wrap" hidden>
       <table><caption class="sr-only">أفضل عشرة انتصارات للفئة المختارة</caption><thead><tr><th scope="col">المركز</th><th scope="col">الاسم</th><th scope="col">النقلات</th><th scope="col">الوقت</th></tr></thead><tbody id="leaderboard-rows"></tbody></table>
     </div>
-    <p class="field-help">محفوظة على هذا المتصفح فقط. تغيير المستوى أو صاحب البداية يعرض قائمة مستقلة. الوقت يستبعد تفكير الكمبيوتر وحركة القطع، ويتوقف عند إخفاء الصفحة أو فتح هذه اللوحة.</p>
+    <p class="field-help"><strong>لوحة الصدارة محلية:</strong>
+تعرض نتائج اللاعبين الذين لعبوا من هذا المتصفح على هذا الجهاز فقط，
+ولا تعرض نتائج جميع زوّار الموقع. تُحذف النتائج عند مسح بيانات الموقع. تغيير المستوى أو صاحب البداية يعرض قائمة مستقلة. الوقت يستبعد تفكير الكمبيوتر وحركة القطع، ويتوقف عند إخفاء الصفحة أو فتح هذه اللوحة.</p>
     <p id="storage-notice" class="notice" role="status" hidden>تعذّر الحفظ على هذا المتصفح. النتائج متاحة لهذه الجلسة فقط.</p>
   </dialog>
 </body>

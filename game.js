@@ -3,7 +3,7 @@ import {
   createBoard, getOpenRow, getGameResult, makeMove,
 } from "./rules.js";
 import { LEVELS, MEDIA, COPY } from "./config.js";
-import { cleanName, createStore, RECORDS_KEY } from "./storage.js";
+import { cleanName, createStore, RECORDS_KEY } from "./storage.js?v=7.2";
 
 import { SoundBank } from "./audio.js";
 import { Celebration } from "./effects.js";

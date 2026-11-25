@@ -16,7 +16,7 @@
     message.textContent = "تحميل اللعبة يأخذ وقتًا أطول من المعتاد. انتظري أو أعيدي تحميل الصفحة.";
     retry.hidden = false;
   }, 12000);
-  import("./game.js").then(() => {
+  import("./game.js?v=7.2").then(() => {
     clearTimeout(slowLoad);
     notice.hidden = true;
     for (const id of ["start-button", "sound-toggle", "leaderboard-button"]) byId(id).disabled = false;

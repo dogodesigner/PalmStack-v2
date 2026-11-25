@@ -4,7 +4,7 @@ import {
 } from "./rules.js";
 import { LEVELS, MEDIA, COPY } from "./config.js";
 import { cleanName, createStore, RECORDS_KEY } from "./storage.js";
-import { createCloudLeaderboard } from "./cloud-leaderboard.js";
+
 import { SoundBank } from "./audio.js";
 import { Celebration } from "./effects.js";
 
@@ -36,7 +36,7 @@ const statsDialog = byId("stats-dialog");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const numbers = new Intl.NumberFormat("ar-SA", { maximumFractionDigits: 1 });
 const store = createStore();
-const cloud = createCloudLeaderboard();
+
 const cloudResults = new Map();
 let leaderboardRequestId = 0;
 let leaderboardStatus = "idle";
@@ -115,6 +115,7 @@ function describeCell(row, col) {
 
 function buildBoard() {
   ui.board.replaceChildren();
+  ui.board.onclick = e => { const cell=e.target.closest(".cell"); if(cell && state.phase==="human") { const col=[...cell.parentElement.children].indexOf(cell); selectColumn(col); if(getOpenRow(state.board,col)>=0) dropSelected(); } };
   ui.controls.replaceChildren();
   cells = [];
   columnButtons = [];
@@ -123,6 +124,7 @@ function buildBoard() {
     button.type = "button";
     button.className = "column-button";
     button.textContent = numbers.format(col + 1);
+    button.addEventListener("pointerenter", e => { if(e.pointerType === "mouse") selectColumn(col); });
     button.addEventListener("click", () => {
       if (state.phase !== "human" || getOpenRow(state.board, col) === -1) return;
       sound.unlock();
@@ -156,6 +158,7 @@ function updateControls() {
   const activePlayer = state.phase === "dropping" ? state.droppingPlayer : state.phase === "human" ? HUMAN : state.phase === "thinking" ? COMPUTER : null;
   for (const [figure, player] of [[human, HUMAN], [computer, COMPUTER]]) {
     figure.classList.remove("is-active", "is-inactive");
+    const indicator=figure.querySelector(".arcade-state"); if(indicator) indicator.textContent=state.phase==="finished"?"END":activePlayer===player?(player===COMPUTER?"CPU TURN":"YOUR TURN"):"WAIT";
     if (activePlayer !== null) figure.classList.add(activePlayer === player ? "is-active" : "is-inactive");
   }
   columnButtons.forEach((button, col) => {
@@ -165,6 +168,8 @@ function updateControls() {
       ? `العمود ${col + 1} من اليسار ممتلئ`
       : `أسقطي قطعتك في العمود ${col + 1} من اليسار`);
   });
+  if (state.phase === "human" && getOpenRow(state.board,state.lastHumanColumn) < 0) state.lastHumanColumn = columnButtons.findIndex(b=>!b.disabled);
+  paintSelection();
 }
 
 function stopWorker() {
@@ -200,6 +205,7 @@ function startRound() {
   ui.audioNotice.hidden = true;
   if (ui.result.open) ui.result.close();
   ui.result.hidden = true;
+  ui.recordMessage.classList.remove("royal-record");
   ui.result.classList.remove("is-human-win");
   ui.recordMessage.textContent = "";
   ui.startScreen.hidden = true;
@@ -262,9 +268,11 @@ async function playMove(col, player, currentRound) {
   piece.setAttribute("aria-hidden", "true");
   cell.append(piece);
   cell.setAttribute("aria-label", describeCell(move.row, col));
+  sound.play("drop");
   await animateDrop(cell, piece);
   if (currentRound !== state.roundId) return;
-  sound.play("drop");
+  sound.play("impact");
+  if(!reducedMotion.matches){const burst=document.createElement("span");burst.className="pixel-burst";for(let i=0;i<8;i++){const dot=document.createElement("i");dot.style.setProperty("--x",`${Math.cos(i*Math.PI/4)*28}px`);dot.style.setProperty("--y",`${Math.sin(i*Math.PI/4)*28}px`);burst.append(dot);}cell.append(burst);setTimeout(()=>burst.remove(),450);}
   const result = getGameResult(state.board);
   if (result.status !== "playing") { finishRound(result); return; }
   state.phase = player === HUMAN ? "thinking" : "human";
@@ -315,7 +323,8 @@ function requestComputerMove(currentRound) {
       }
       stopWorker();
       showStats(result.stats);
-      void playMove(result.col, COMPUTER, currentRound);
+      showPreview(result.col, COMPUTER);
+      setTimeout(() => { if(currentRound === state.roundId && state.phase === "thinking") void playMove(result.col, COMPUTER, currentRound); }, reducedMotion.matches ? 0 : 260);
     };
     activeWorker.onerror = (event) => {
       event.preventDefault();
@@ -348,30 +357,8 @@ function recordWin() {
     ui.recordMessage.textContent = "انتهت الجولة، لكن لم تُقبل نتيجة الصدارة.";
     return;
   }
-  ui.recordMessage.textContent = "جارٍ حفظ فوزك…";
-  const roundId = state.roundId;
-  void cloud.submitWin(submitted).then((result) => {
-    if (roundId === state.roundId && state.phase === "finished") {
-      if (result.rank) {
-        ui.recordMessage.textContent = result.improved
-          ? `تم تسجيل فوزك في الصدارة العامة! مركزك ${numbers.format(result.rank)}.`
-          : `أفضل فوز سابق لك ما زال بالمركز ${numbers.format(result.rank)} في الصدارة العامة.`;
-      } else {
-        ui.recordMessage.textContent = result.improved
-          ? "تم حفظ فوزك للجميع! جرّبي نقلات أقل لدخول العشرة الأوائل."
-          : "أفضل فوز سابق لك محفوظ في الصدارة العامة. جرّبي تحسّنين نتيجتك!";
-      }
-    }
-    cloudResults.delete(JSON.stringify([submitted.level, submitted.starter]));
-    if (ui.leaderboard.open) void fetchLeaderboard();
-  }).catch((error) => {
-    console.warn("Public leaderboard: unable to save win", error);
-    if (roundId === state.roundId && state.phase === "finished") {
-      ui.recordMessage.textContent = localRecord.saved
-        ? "فزتِ! النتيجة محفوظة على جهازك فقط؛ تعذّر إرسالها للصدارة العامة."
-        : "فزتِ! تعذّر إرسال النتيجة للصدارة العامة وحفظها على الجهاز.";
-    }
-  });
+  ui.recordMessage.textContent = localRecord.saved ? (localRecord.rank ? `أفضل نتيجة لك محفوظة محليًا — المركز ${numbers.format(localRecord.rank)}` : "تم حفظ نتيجتك محليًا.") : "تعذّر حفظ النتيجة على الجهاز.";
+  if (localRecord.rank === 1 && localRecord.improved) ui.recordMessage.classList.add("royal-record");
   renderLeaderboard();
 }
 
@@ -415,26 +402,10 @@ function leaderboardGroup() {
 }
 
 function renderLeaderboard() {
-  const group = leaderboardGroup();
-  const isPublic = cloudResults.has(group);
-  const records = isPublic ? cloudResults.get(group) : store.list(ui.filterLevel.value, ui.filterStarter.value);
-  ui.rows.replaceChildren();
-  ui.empty.hidden = records.length !== 0;
-  ui.table.hidden = records.length === 0;
-  ui.storageNotice.hidden = isPublic || store.persistent;
-  if (leaderboardStatus === "loading" && !isPublic) {
-    ui.leaderboardSource.textContent = "جارٍ التحديث… نتائج جهازك مؤقتًا.";
-  } else if (leaderboardStatus === "offline" && !isPublic) {
-    ui.leaderboardSource.textContent = "تعذّر الاتصال. نتائج جهازك فقط.";
-  } else if (isPublic) {
-    ui.leaderboardSource.textContent = leaderboardStatus === "loading"
-      ? "آخر نتائج عامة متاحة (جارٍ التحديث…)"
-      : leaderboardStatus === "offline"
-        ? "تعذر التحديث؛ هذه آخر نتائج عامة تم تحميلها، وقد تكون قديمة."
-        : "الصدارة العامة — نتائج اللاعبات من جميع الأجهزة.";
-  } else {
-    ui.leaderboardSource.textContent = "نتائج جهازك فقط.";
-  }
+  const records = store.list(ui.filterLevel.value, ui.filterStarter.value);
+  ui.rows.replaceChildren(); ui.empty.hidden = records.length !== 0; ui.table.hidden = !records.length;
+  ui.storageNotice.hidden = store.persistent;
+  ui.leaderboardSource.textContent = "الصدارة المحلية — نتائج هذا المتصفح فقط.";
   records.forEach((record, index) => {
     const row = document.createElement("tr");
     if (index < 3) row.className = `rank-${index + 1}`;
@@ -444,14 +415,11 @@ function renderLeaderboard() {
       const cell = document.createElement("td");
       if (position === 1) {
         const name = document.createElement("bdi");
-        name.textContent = value;
-        const prefix = document.createElement("span");
-        prefix.className = "queen-prefix";
-        prefix.textContent = "الملكة ";
-        cell.append(prefix, name);
+        name.textContent = index === 0 ? `الملكة ${value}` : value;
+        cell.append(name);
       } else if (position === 0 && index === 0) {
         const star = document.createElement("img");
-        star.src = "./assets/characters/crown.svg";
+        star.src = "./assets/characters/rank-first.webp";
         star.alt = "";
         star.className = "rank-crown";
         cell.append(star);
@@ -464,28 +432,7 @@ function renderLeaderboard() {
   });
 }
 
-async function fetchLeaderboard() {
-  const group = leaderboardGroup();
-  const level = ui.filterLevel.value;
-  const starter = ui.filterStarter.value;
-  const requestId = ++leaderboardRequestId;
-  leaderboardStatus = "loading";
-  ui.refreshLeaderboard.disabled = true;
-  renderLeaderboard();
-  try {
-    const records = await cloud.list(level, starter);
-    cloudResults.set(group, records);
-    if (requestId === leaderboardRequestId) leaderboardStatus = "ready";
-  } catch (error) {
-    console.warn("Public leaderboard: unable to load scores", error);
-    if (requestId === leaderboardRequestId) leaderboardStatus = "offline";
-  } finally {
-    if (requestId === leaderboardRequestId) {
-      ui.refreshLeaderboard.disabled = false;
-      renderLeaderboard();
-    }
-  }
-}
+async function fetchLeaderboard() { store.refresh(); renderLeaderboard(); }
 
 function updateSoundButton() {
   ui.sound.setAttribute("aria-pressed", String(sound.enabled));
@@ -517,9 +464,6 @@ function toggleSound() {
 
 function returnToStart(clearName) {
   cancelPendingWork();
-  if (clearName) void cloud.newPlayer().catch((error) => {
-    console.warn("Public leaderboard: could not switch anonymous player", error);
-  });
   state.phase = "start";
   if (ui.result.open) ui.result.close();
   ui.result.hidden = true;
@@ -555,7 +499,15 @@ ui.form.addEventListener("submit", (event) => {
   if (state.phase !== "start") return;
   sound.unlock();
   sound.play("click");
-  state.name = cleanName(ui.nameInput.value);
+  const name = cleanName(ui.nameInput.value);
+  store.refresh();
+  if (name && store.hasName(name)) { byId("duplicate-name").showModal(); return; }
+  beginNamedRound(name);
+});
+function beginNamedRound(name) {
+  void sound.unlock().then(()=>sound.play("start"));
+  state.name = name;
+  store.rememberName(name);
   state.level = Object.hasOwn(LEVELS, ui.level.value) ? ui.level.value : "easy";
   ui.humanName.textContent = state.name || "أنتِ";
   state.nextStarter = HUMAN;
@@ -563,16 +515,15 @@ ui.form.addEventListener("submit", (event) => {
   updateScores();
   store.saveSettings({ level: state.level, sound: sound.enabled });
   startRound();
-});
+}
+byId("same-name").onclick = () => { byId("duplicate-name").close(); beginNamedRound(cleanName(ui.nameInput.value)); };
+byId("different-name").onclick = () => { byId("duplicate-name").close(); ui.nameInput.focus(); ui.nameInput.select(); };
 
 byId("result-new-round").addEventListener("click", () => { sound.unlock(); if (state.phase === "finished") startRound(); });
-function dismissResult() {
-  ui.result.hidden = true;
-  if (ui.result.open) ui.result.close();
-}
-byId("result-close").addEventListener("click", () => { dismissResult(); openLeaderboard(); });
-byId("result-view-board").addEventListener("click", () => { dismissResult(); ui.gameTitle.focus(); });
-ui.result.addEventListener("close", () => { if (!ui.result.open) ui.result.hidden = true; });
+byId("result-home").onclick = () => returnToStart(false);
+byId("result-ranks").onclick = () => { ui.result.close(); ui.openLeaderboard.click(); };
+byId("result-close").addEventListener("click", () => ui.result.close());
+ui.result.addEventListener("close", () => { if (!ui.result.open) { ui.result.hidden = true; sound.stopAll(); } });
 byId("open-stats").addEventListener("click", () => { stopClock(); statsDialog.showModal(); });
 byId("close-stats").addEventListener("click", () => statsDialog.close());
 statsDialog.addEventListener("close", () => { startClock(); if (state.phase === "finished" && !ui.result.hidden && !ui.result.open) { ui.result.showModal(); ui.resultTitle.focus(); } });
@@ -613,7 +564,7 @@ ui.retryMedia.addEventListener("click", () => {
   }
 });
 
-function openLeaderboard() {
+ui.openLeaderboard.addEventListener("click", () => {
   sound.unlock();
   sound.play("click");
   stopClock();
@@ -622,8 +573,7 @@ function openLeaderboard() {
   renderLeaderboard();
   if (!ui.leaderboard.open) ui.leaderboard.showModal();
   void fetchLeaderboard();
-}
-ui.openLeaderboard.addEventListener("click", openLeaderboard);
+});
 ui.closeLeaderboard.addEventListener("click", () => ui.leaderboard.close());
 ui.leaderboard.addEventListener("close", () => {
   startClock();
@@ -634,20 +584,32 @@ ui.filterStarter.addEventListener("change", () => { renderLeaderboard(); void fe
 ui.refreshLeaderboard.addEventListener("click", () => { void fetchLeaderboard(); });
 window.addEventListener("online", () => { if (ui.leaderboard.open) void fetchLeaderboard(); });
 
-ui.controls.addEventListener("keydown", (event) => {
-  if (state.phase !== "human") return;
-  const available = columnButtons.filter((button) => !button.disabled);
-  const index = available.indexOf(event.target);
-  if (index === -1) return;
-  const keys = {
-    ArrowLeft: (index - 1 + available.length) % available.length,
-    ArrowRight: (index + 1) % available.length, Home: 0, End: available.length - 1,
-  };
-  if (!Object.hasOwn(keys, event.key)) return;
-  event.preventDefault();
-  available[keys[event.key]].focus();
+function showPreview(col, player) {
+  const preview = byId("coin-preview");
+  preview.hidden = col < 0;
+  preview.style.setProperty("--selected", col);
+  preview.className = `coin-preview piece--${player === HUMAN ? "human" : "computer"}`;
+}
+function paintSelection() {
+  const active = state.phase === "human";
+  showPreview(active ? state.lastHumanColumn : -1, HUMAN);
+  columnButtons.forEach((b,i)=>b.classList.toggle("selected-column",active && i===state.lastHumanColumn));
+  for (const id of ["move-left","move-right","move-drop"]) byId(id).disabled = !active;
+}
+function selectColumn(col) {
+  if(state.phase !== "human" || getOpenRow(state.board,col)<0 || col===state.lastHumanColumn) return;
+  state.lastHumanColumn=col; paintSelection(); sound.play("move");
+}
+function shiftColumn(dir) { for(let c=state.lastHumanColumn+dir;c>=0&&c<COLS;c+=dir) if(getOpenRow(state.board,c)>=0){selectColumn(c);break;} }
+function dropSelected(){ if(state.phase === "human") { sound.unlock(); void playMove(state.lastHumanColumn,HUMAN,state.roundId); } }
+byId("move-left").onclick=()=>shiftColumn(-1);
+byId("move-right").onclick=()=>shiftColumn(1);
+byId("move-drop").onclick=dropSelected;
+document.addEventListener("keydown", e=>{
+ if(state.phase!=="human" || document.querySelector("dialog[open]") || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+ if(e.key==="ArrowLeft"||e.key==="ArrowRight"){e.preventDefault();shiftColumn(e.key==="ArrowLeft"?-1:1);}
+ else if(e.key==="ArrowDown"|| (e.code==="Space" && !e.target.closest("button"))){e.preventDefault();if(!e.repeat)dropSelected();}
 });
-
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) { stopClock(); sound.pauseForVisibility(); effects.clear(); }
   else startClock();
@@ -665,4 +627,12 @@ ui.filterLevel.value = store.settings.level;
 ui.filterStarter.value = "human";
 updateSoundButton();
 byId("copyright-year").textContent = new Date().getFullYear();
+loadImage("signature-image", MEDIA.signature, "signature-fallback");
+loadImage("side-left-image", MEDIA.sideLeft);
+loadImage("side-right-image", MEDIA.sideRight);
 
+// Original synthesized chiptune loop; opt-in and independent of game effects.
+const musicButton=byId("retro-music"); let musicOn=false,musicTimer=null,musicContext=null,musicGain=null,musicStep=0;
+const melody=[72,76,79,76,74,77,81,77,72,76,79,84,81,79,76,74];
+function musicTick(){if(!musicOn||document.hidden||state.phase==="finished"||!sound.enabled||!musicContext)return;const t=musicContext.currentTime;for(const [note,vol,type] of [[melody[musicStep%16],.045,"square"],[48+[0,0,5,5,7,7,5,5][Math.floor(musicStep/2)%8],.045,"triangle"]]){const o=musicContext.createOscillator(),g=musicContext.createGain();o.type=type;o.frequency.value=440*2**((note-69)/12);g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.0001,t+.16);o.connect(g);g.connect(musicGain);o.start(t);o.stop(t+.18);}musicStep++;}
+musicButton.onclick=async()=>{musicOn=!musicOn;musicButton.setAttribute("aria-pressed",String(musicOn));musicButton.textContent="موسيقى الريترو: "+(musicOn?"تعمل":"متوقفة");if(musicOn){try{if(!musicContext){musicContext=new (window.AudioContext||window.webkitAudioContext)();musicGain=musicContext.createGain();musicGain.gain.value=.5;musicGain.connect(musicContext.destination);}await musicContext.resume();if(musicOn){clearInterval(musicTimer);musicTimer=setInterval(musicTick,230);musicTick();}}catch{musicOn=false;musicButton.setAttribute("aria-pressed","false");musicButton.textContent="الموسيقى غير متاحة";}}else{clearInterval(musicTimer);musicTimer=null;}};

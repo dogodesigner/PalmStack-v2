@@ -8,6 +8,7 @@
   <title>بالم ستاك | Palm Stack</title>
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./royal.css?v=51">
   <script defer src="./bootstrap.js"></script>
 </head>
 <body>
@@ -49,7 +50,6 @@
             <span class="duel-tag duel-tag--human">أنتِ</span><span class="duel-tag duel-tag--computer">الكمبيوتر</span>
           </div>
           <figcaption class="artist-signature">
-            <img id="signature-image" class="signature" alt="دانة التميمي — توقيع بخط اليد" hidden>
             <span id="signature-fallback">دانة التميمي</span>
           </figcaption>
         </figure>
@@ -155,7 +155,7 @@
                 </div>
                 <p id="audio-notice" class="audio-notice" role="status" hidden></p>
               </div>
-            <div class="result-actions"><button id="result-new-round" class="button button--primary" type="button">جولة جديدة</button><button id="result-close" class="button button--quiet" type="button">عرض اللوحة</button></div><p class="vote-note result-vote"><img src="./assets/characters/star.webp" alt="">صوّتوا لي !!</p></dialog>
+            <div class="result-actions"><button id="result-new-round" class="button button--primary" type="button">جولة جديدة</button><button id="result-close" class="button button--quiet" type="button">لوحة الصدارة</button><button id="result-view-board" class="button button--quiet" type="button">عرض لوحة اللعب</button></div><p class="vote-note result-vote"><img src="./assets/characters/star.webp" alt="">صوّتوا لي !!</p></dialog>
 
             <dialog id="stats-dialog" class="stats-dialog" aria-labelledby="stats-title">
               <div class="dialog-heading"><h2 id="stats-title">كيف يفكّر الكمبيوتر؟</h2><button id="close-stats" class="button button--quiet" type="button">إغلاق</button></div>
@@ -170,7 +170,7 @@
             </dialog>
 
   <dialog id="leaderboard-dialog" class="leaderboard-dialog" aria-labelledby="leaderboard-title">
-    <div class="dialog-heading"><div><p class="eyebrow">بطلات بالم ستاك</p><h2 id="leaderboard-title">لوحة الصدارة</h2></div>
+    <div class="dialog-heading"><div class="royal-title"><img src="./assets/characters/crown.svg" alt=""><div><p class="eyebrow">ملكات بالم ستاك</p><h2 id="leaderboard-title">لوحة الصدارة</h2></div></div>
       <button id="close-leaderboard" class="button button--quiet" type="button" autofocus>إغلاق</button></div>
     <p class="leaderboard-intro">أقل نقلات، ثم أقل وقت تفكير.</p>
     <div class="leaderboard-filters">

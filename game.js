@@ -445,10 +445,13 @@ function renderLeaderboard() {
       if (position === 1) {
         const name = document.createElement("bdi");
         name.textContent = value;
-        cell.append(name);
+        const prefix = document.createElement("span");
+        prefix.className = "queen-prefix";
+        prefix.textContent = "الملكة ";
+        cell.append(prefix, name);
       } else if (position === 0 && index === 0) {
         const star = document.createElement("img");
-        star.src = "./assets/characters/rank-first.webp";
+        star.src = "./assets/characters/crown.svg";
         star.alt = "";
         star.className = "rank-crown";
         cell.append(star);
@@ -563,7 +566,12 @@ ui.form.addEventListener("submit", (event) => {
 });
 
 byId("result-new-round").addEventListener("click", () => { sound.unlock(); if (state.phase === "finished") startRound(); });
-byId("result-close").addEventListener("click", () => ui.result.close());
+function dismissResult() {
+  ui.result.hidden = true;
+  if (ui.result.open) ui.result.close();
+}
+byId("result-close").addEventListener("click", () => { dismissResult(); openLeaderboard(); });
+byId("result-view-board").addEventListener("click", () => { dismissResult(); ui.gameTitle.focus(); });
 ui.result.addEventListener("close", () => { if (!ui.result.open) ui.result.hidden = true; });
 byId("open-stats").addEventListener("click", () => { stopClock(); statsDialog.showModal(); });
 byId("close-stats").addEventListener("click", () => statsDialog.close());
@@ -605,7 +613,7 @@ ui.retryMedia.addEventListener("click", () => {
   }
 });
 
-ui.openLeaderboard.addEventListener("click", () => {
+function openLeaderboard() {
   sound.unlock();
   sound.play("click");
   stopClock();
@@ -614,7 +622,8 @@ ui.openLeaderboard.addEventListener("click", () => {
   renderLeaderboard();
   if (!ui.leaderboard.open) ui.leaderboard.showModal();
   void fetchLeaderboard();
-});
+}
+ui.openLeaderboard.addEventListener("click", openLeaderboard);
 ui.closeLeaderboard.addEventListener("click", () => ui.leaderboard.close());
 ui.leaderboard.addEventListener("close", () => {
   startClock();
@@ -656,6 +665,4 @@ ui.filterLevel.value = store.settings.level;
 ui.filterStarter.value = "human";
 updateSoundButton();
 byId("copyright-year").textContent = new Date().getFullYear();
-loadImage("signature-image", MEDIA.signature, "signature-fallback");
-loadImage("side-left-image", MEDIA.sideLeft);
-loadImage("side-right-image", MEDIA.sideRight);
+

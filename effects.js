@@ -24,7 +24,7 @@ export class Celebration {
     this.resultPanel?.classList.add("is-revealing");
     this.nextButton?.classList.add("is-inviting");
     const colors = ["#ac88c8", "#efbc61", "#a4b76e", "#eeb394", "#fff5d8"];
-    const shapes = ["circle", "star", "heart"];
+    const shapes = ["art-star", "art-star", "circle", "art-star"];
     const width = this.layer.clientWidth;
     const height = this.layer.clientHeight;
     for (let index = 0; index < 36; index++) {
@@ -38,7 +38,7 @@ export class Celebration {
       const rise = height * (0.43 + Math.random() * 0.42);
       particle.style.setProperty("--origin", left ? "8%" : "92%");
       particle.style.setProperty("--confetti-color", colors[index % colors.length]);
-      particle.style.setProperty("--confetti-size", `${7 + Math.random() * 7}px`);
+      particle.style.setProperty("--confetti-size", `${12 + Math.random() * 16}px`);
       particle.style.setProperty("--peak-x", `${x * 0.7}px`);
       particle.style.setProperty("--peak-y", `${-rise}px`);
       particle.style.setProperty("--end-x", `${x}px`);

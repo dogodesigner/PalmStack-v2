@@ -4,6 +4,7 @@ import {
 } from "./rules.js";
 import { LEVELS, MEDIA, COPY } from "./config.js";
 import { cleanName, createStore, RECORDS_KEY } from "./storage.js";
+import { createCloudLeaderboard } from "./cloud-leaderboard.js";
 import { SoundBank } from "./audio.js";
 import { Celebration } from "./effects.js";
 
@@ -23,6 +24,7 @@ const ui = {
   filterStarter: byId("leaderboard-starter"), rows: byId("leaderboard-rows"),
   empty: byId("leaderboard-empty"), table: byId("leaderboard-table-wrap"),
   storageNotice: byId("storage-notice"),
+  leaderboardSource: byId("leaderboard-source"), refreshLeaderboard: byId("refresh-leaderboard"),
   errorMessage: byId("game-error-message"), retryMove: byId("retry-move-button"),
   winControls: byId("win-audio-controls"), winPlay: byId("win-play-button"),
   winPause: byId("win-pause-button"), winMute: byId("win-mute-button"),
@@ -30,9 +32,14 @@ const ui = {
   mediaNotice: byId("media-notice"), retryMedia: byId("retry-media-button"),
 };
 
+const statsDialog = byId("stats-dialog");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const numbers = new Intl.NumberFormat("ar-SA", { maximumFractionDigits: 1 });
 const store = createStore();
+const cloud = createCloudLeaderboard();
+const cloudResults = new Map();
+let leaderboardRequestId = 0;
+let leaderboardStatus = "idle";
 const sound = new SoundBank(store.settings.sound, {
   onWinChange: renderWinSound,
   onNotice: (message) => {
@@ -45,7 +52,7 @@ const scores = { human: 0, computer: 0, draw: 0 };
 const state = {
   board: createBoard(), phase: "start", name: "", level: store.settings.level,
   nextStarter: HUMAN, starter: HUMAN, roundId: 0, requestId: 0,
-  moves: 0, thinkingMs: 0, thinkingSince: null, lastHumanColumn: 3,
+  moves: 0, thinkingMs: 0, thinkingSince: null, lastHumanColumn: 3, droppingPlayer: null,
 };
 let worker = null;
 let workerTimer = null;
@@ -72,7 +79,7 @@ function renderClock() {
 }
 
 function startClock() {
-  if (state.phase === "human" && !document.hidden && !ui.leaderboard.open &&
+  if (state.phase === "human" && !document.hidden && !ui.leaderboard.open && !statsDialog.open &&
       state.thinkingSince === null) state.thinkingSince = performance.now();
 }
 
@@ -144,12 +151,19 @@ function buildBoard() {
 }
 
 function updateControls() {
+  const human = byId("human-fighter");
+  const computer = byId("computer-fighter");
+  const activePlayer = state.phase === "dropping" ? state.droppingPlayer : state.phase === "human" ? HUMAN : state.phase === "thinking" ? COMPUTER : null;
+  for (const [figure, player] of [[human, HUMAN], [computer, COMPUTER]]) {
+    figure.classList.remove("is-active", "is-inactive");
+    if (activePlayer !== null) figure.classList.add(activePlayer === player ? "is-active" : "is-inactive");
+  }
   columnButtons.forEach((button, col) => {
     const full = getOpenRow(state.board, col) === -1;
     button.disabled = state.phase !== "human" || full;
     button.setAttribute("aria-label", full
       ? `العمود ${col + 1} من اليسار ممتلئ`
-      : `أسقط قطعتك في العمود ${col + 1} من اليسار`);
+      : `أسقطي قطعتك في العمود ${col + 1} من اليسار`);
   });
 }
 
@@ -184,6 +198,7 @@ function startRound() {
   ui.errorMessage.textContent = "";
   ui.winControls.hidden = true;
   ui.audioNotice.hidden = true;
+  if (ui.result.open) ui.result.close();
   ui.result.hidden = true;
   ui.result.classList.remove("is-human-win");
   ui.recordMessage.textContent = "";
@@ -198,7 +213,7 @@ function startRound() {
   ui.gameTitle.focus();
   if (state.starter === COMPUTER) requestComputerMove(state.roundId);
   else {
-    ui.status.textContent = "دورك — اختر عمودًا لقطعتك الخزامية";
+    ui.status.textContent = "دورك الحين!";
     startClock();
   }
 }
@@ -235,6 +250,7 @@ async function playMove(col, player, currentRound) {
   if (!move) return;
   stopClock();
   if (player === HUMAN) state.moves++;
+  state.droppingPlayer = player;
   state.phase = "dropping";
   state.board = move.board;
   renderClock();
@@ -255,9 +271,9 @@ async function playMove(col, player, currentRound) {
   updateControls();
   if (state.phase === "thinking") requestComputerMove(currentRound);
   else {
-    ui.status.textContent = "دورك — اختر عمودًا لقطعتك الخزامية";
+    ui.status.textContent = "دورك الحين!";
     startClock();
-    if (!ui.leaderboard.open && (document.activeElement === document.body ||
+    if (!ui.leaderboard.open && !statsDialog.open && (document.activeElement === document.body ||
         columnButtons.includes(document.activeElement))) {
       const button = columnButtons[state.lastHumanColumn];
       const target = button.disabled ? columnButtons.find((item) => !item.disabled) : button;
@@ -279,7 +295,7 @@ function requestComputerMove(currentRound) {
     state.phase = "error";
     updateControls();
     ui.status.textContent = "توقفت الجولة مؤقتًا";
-    ui.errorMessage.textContent = "تعذّر إكمال نقلة الكمبيوتر. اللوحة محفوظة؛ حاول مرة أخرى لإكمال الجولة.";
+    ui.errorMessage.textContent = "تعذّر إكمال نقلة الكمبيوتر. اللوحة محفوظة؛ حاولي مرة ثانية.";
     ui.error.hidden = false;
     ui.retryMove.focus({ preventScroll: true });
     console.error("Computer move failed:", error);
@@ -319,21 +335,43 @@ function requestComputerMove(currentRound) {
 
 function recordWin() {
   if (!state.name) {
-    ui.recordMessage.textContent = "اكتب اسمك عند بدء تحدٍّ جديد ليظهر إنجازك في الصدارة.";
+    ui.recordMessage.textContent = "اختاري لقبًا في الجولة القادمة للصدارة.";
     return;
   }
-  const record = store.submitWin({
+  const submitted = {
     name: state.name, level: state.level,
     starter: state.starter === HUMAN ? "human" : "computer",
     moves: state.moves, thinkingMs: Math.round(state.thinkingMs),
+  };
+  const localRecord = store.submitWin(submitted);
+  if (!localRecord.accepted) {
+    ui.recordMessage.textContent = "انتهت الجولة، لكن لم تُقبل نتيجة الصدارة.";
+    return;
+  }
+  ui.recordMessage.textContent = "جارٍ حفظ فوزك…";
+  const roundId = state.roundId;
+  void cloud.submitWin(submitted).then((result) => {
+    if (roundId === state.roundId && state.phase === "finished") {
+      if (result.rank) {
+        ui.recordMessage.textContent = result.improved
+          ? `تم تسجيل فوزك في الصدارة العامة! مركزك ${numbers.format(result.rank)}.`
+          : `أفضل فوز سابق لك ما زال بالمركز ${numbers.format(result.rank)} في الصدارة العامة.`;
+      } else {
+        ui.recordMessage.textContent = result.improved
+          ? "تم حفظ فوزك للجميع! جرّبي نقلات أقل لدخول العشرة الأوائل."
+          : "أفضل فوز سابق لك محفوظ في الصدارة العامة. جرّبي تحسّنين نتيجتك!";
+      }
+    }
+    cloudResults.delete(JSON.stringify([submitted.level, submitted.starter]));
+    if (ui.leaderboard.open) void fetchLeaderboard();
+  }).catch((error) => {
+    console.warn("Public leaderboard: unable to save win", error);
+    if (roundId === state.roundId && state.phase === "finished") {
+      ui.recordMessage.textContent = localRecord.saved
+        ? "فزتِ! النتيجة محفوظة على جهازك فقط؛ تعذّر إرسالها للصدارة العامة."
+        : "فزتِ! تعذّر إرسال النتيجة للصدارة العامة وحفظها على الجهاز.";
+    }
   });
-  if (!record.accepted) ui.recordMessage.textContent = "انتهت الجولة، لكن لم تُحفظ نتيجة الصدارة.";
-  else if (!record.saved) ui.recordMessage.textContent = "نتيجتك متاحة لهذه الجلسة؛ تعذّر حفظها على المتصفح.";
-  else if (record.rank) {
-    ui.recordMessage.textContent = record.improved
-      ? `أفضل فوز جديد لك! ترتيبك في هذه الفئة: ${numbers.format(record.rank)}.`
-      : `أفضل نتيجة لك في هذه الفئة ما زالت بالمركز ${numbers.format(record.rank)}.`;
-  } else ui.recordMessage.textContent = "فوز مستحق! جرّب نقلات أقل لدخول قائمة العشرة الأوائل.";
   renderLeaderboard();
 }
 
@@ -369,17 +407,37 @@ function finishRound(result) {
   updateScores();
   ui.status.textContent = "انتهت الجولة";
   ui.result.hidden = false;
-  if (!ui.leaderboard.open) ui.resultTitle.focus();
+  if (!ui.leaderboard.open && !statsDialog.open) { ui.result.showModal(); ui.resultTitle.focus(); }
+}
+
+function leaderboardGroup() {
+  return JSON.stringify([ui.filterLevel.value, ui.filterStarter.value]);
 }
 
 function renderLeaderboard() {
-  const records = store.list(ui.filterLevel.value, ui.filterStarter.value);
+  const group = leaderboardGroup();
+  const isPublic = cloudResults.has(group);
+  const records = isPublic ? cloudResults.get(group) : store.list(ui.filterLevel.value, ui.filterStarter.value);
   ui.rows.replaceChildren();
   ui.empty.hidden = records.length !== 0;
   ui.table.hidden = records.length === 0;
-  ui.storageNotice.hidden = store.persistent;
+  ui.storageNotice.hidden = isPublic || store.persistent;
+  if (leaderboardStatus === "loading" && !isPublic) {
+    ui.leaderboardSource.textContent = "جارٍ التحديث… نتائج جهازك مؤقتًا.";
+  } else if (leaderboardStatus === "offline" && !isPublic) {
+    ui.leaderboardSource.textContent = "تعذّر الاتصال. نتائج جهازك فقط.";
+  } else if (isPublic) {
+    ui.leaderboardSource.textContent = leaderboardStatus === "loading"
+      ? "آخر نتائج عامة متاحة (جارٍ التحديث…)"
+      : leaderboardStatus === "offline"
+        ? "تعذر التحديث؛ هذه آخر نتائج عامة تم تحميلها، وقد تكون قديمة."
+        : "الصدارة العامة — نتائج اللاعبات من جميع الأجهزة.";
+  } else {
+    ui.leaderboardSource.textContent = "نتائج جهازك فقط.";
+  }
   records.forEach((record, index) => {
     const row = document.createElement("tr");
+    if (index < 3) row.className = `rank-${index + 1}`;
     const values = [numbers.format(index + 1), record.name,
       numbers.format(record.moves), formatTime(record.thinkingMs)];
     values.forEach((value, position) => {
@@ -388,12 +446,42 @@ function renderLeaderboard() {
         const name = document.createElement("bdi");
         name.textContent = value;
         cell.append(name);
+      } else if (position === 0 && index === 0) {
+        const star = document.createElement("img");
+        star.src = "./assets/characters/rank-first.webp";
+        star.alt = "";
+        star.className = "rank-crown";
+        cell.append(star);
+        const rank = document.createElement("span"); rank.textContent = value; cell.append(rank);
       } else cell.textContent = value;
       if (position === 3) cell.setAttribute("dir", "ltr");
       row.append(cell);
     });
     ui.rows.append(row);
   });
+}
+
+async function fetchLeaderboard() {
+  const group = leaderboardGroup();
+  const level = ui.filterLevel.value;
+  const starter = ui.filterStarter.value;
+  const requestId = ++leaderboardRequestId;
+  leaderboardStatus = "loading";
+  ui.refreshLeaderboard.disabled = true;
+  renderLeaderboard();
+  try {
+    const records = await cloud.list(level, starter);
+    cloudResults.set(group, records);
+    if (requestId === leaderboardRequestId) leaderboardStatus = "ready";
+  } catch (error) {
+    console.warn("Public leaderboard: unable to load scores", error);
+    if (requestId === leaderboardRequestId) leaderboardStatus = "offline";
+  } finally {
+    if (requestId === leaderboardRequestId) {
+      ui.refreshLeaderboard.disabled = false;
+      renderLeaderboard();
+    }
+  }
 }
 
 function updateSoundButton() {
@@ -426,7 +514,12 @@ function toggleSound() {
 
 function returnToStart(clearName) {
   cancelPendingWork();
+  if (clearName) void cloud.newPlayer().catch((error) => {
+    console.warn("Public leaderboard: could not switch anonymous player", error);
+  });
   state.phase = "start";
+  if (ui.result.open) ui.result.close();
+  ui.result.hidden = true;
   scores.human = scores.computer = scores.draw = 0;
   updateScores();
   ui.nameInput.value = clearName ? "" : state.name;
@@ -461,7 +554,7 @@ ui.form.addEventListener("submit", (event) => {
   sound.play("click");
   state.name = cleanName(ui.nameInput.value);
   state.level = Object.hasOwn(LEVELS, ui.level.value) ? ui.level.value : "easy";
-  ui.humanName.textContent = state.name || "أنت";
+  ui.humanName.textContent = state.name || "أنتِ";
   state.nextStarter = HUMAN;
   scores.human = scores.computer = scores.draw = 0;
   updateScores();
@@ -469,6 +562,12 @@ ui.form.addEventListener("submit", (event) => {
   startRound();
 });
 
+byId("result-new-round").addEventListener("click", () => { sound.unlock(); if (state.phase === "finished") startRound(); });
+byId("result-close").addEventListener("click", () => ui.result.close());
+ui.result.addEventListener("close", () => { if (!ui.result.open) ui.result.hidden = true; });
+byId("open-stats").addEventListener("click", () => { stopClock(); statsDialog.showModal(); });
+byId("close-stats").addEventListener("click", () => statsDialog.close());
+statsDialog.addEventListener("close", () => { startClock(); if (state.phase === "finished" && !ui.result.hidden && !ui.result.open) { ui.result.showModal(); ui.resultTitle.focus(); } });
 ui.newRound.addEventListener("click", () => {
   sound.unlock();
   if (state.phase !== "start") startRound();
@@ -514,14 +613,17 @@ ui.openLeaderboard.addEventListener("click", () => {
   ui.filterStarter.value = state.phase !== "start" && state.starter === COMPUTER ? "computer" : "human";
   renderLeaderboard();
   if (!ui.leaderboard.open) ui.leaderboard.showModal();
+  void fetchLeaderboard();
 });
 ui.closeLeaderboard.addEventListener("click", () => ui.leaderboard.close());
 ui.leaderboard.addEventListener("close", () => {
   startClock();
-  if (state.phase === "finished") ui.resultTitle.focus();
+  if (state.phase === "finished" && !ui.result.hidden && !ui.result.open) { ui.result.showModal(); ui.resultTitle.focus(); }
 });
-ui.filterLevel.addEventListener("change", renderLeaderboard);
-ui.filterStarter.addEventListener("change", renderLeaderboard);
+ui.filterLevel.addEventListener("change", () => { renderLeaderboard(); void fetchLeaderboard(); });
+ui.filterStarter.addEventListener("change", () => { renderLeaderboard(); void fetchLeaderboard(); });
+ui.refreshLeaderboard.addEventListener("click", () => { void fetchLeaderboard(); });
+window.addEventListener("online", () => { if (ui.leaderboard.open) void fetchLeaderboard(); });
 
 ui.controls.addEventListener("keydown", (event) => {
   if (state.phase !== "human") return;
@@ -554,7 +656,6 @@ ui.filterLevel.value = store.settings.level;
 ui.filterStarter.value = "human";
 updateSoundButton();
 byId("copyright-year").textContent = new Date().getFullYear();
-loadImage("hero-image", MEDIA.hero, "hero-fallback");
 loadImage("signature-image", MEDIA.signature, "signature-fallback");
 loadImage("side-left-image", MEDIA.sideLeft);
 loadImage("side-right-image", MEDIA.sideRight);

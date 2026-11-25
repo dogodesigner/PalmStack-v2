@@ -18,15 +18,15 @@ export const MEDIA = Object.freeze({
 export const AUDIO = Object.freeze({
   volume: 0.32,
   maxWinSeconds: 8,
-  // An empty path uses a short synthesized sound.
-  files: Object.freeze({ click: "", drop: "", win: "", lose: "", draw: "" }),
+  // Missing or empty paths retain the synthesized fallback.
+  files: Object.freeze({ click: "", drop: "", win: "./assets/audio/win.mp3", lose: "", draw: "" }),
 });
 
 export const COPY = Object.freeze({
-  humanWin: "كفو! فوز يرفع الراس",
-  humanWinMessage: "أربع قطع على خط واحد… لعبك له بصمة!",
+  humanWin: "تستاهلين الورد!",
+  humanWinMessage: "غلبتِ الكمبيوتر!",
   computerWin: "الجولة للكمبيوتر",
-  computerWinMessage: "نقطة له، والتحدّي مستمر. جاهز للجولة الجاية؟",
+  computerWinMessage: "جربي مرة ثانية!",
   draw: "تعادل… التحدّي متقارب!",
-  drawMessage: "امتلأت اللوحة. جولة جديدة تحسمها؟",
+  drawMessage: "جولة جديدة؟",
 });

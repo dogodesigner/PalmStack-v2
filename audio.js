@@ -190,7 +190,7 @@ export class SoundBank {
       if (request !== this.winRequest) return false;
       this.detachWin();
       this.winState = "error";
-      this.onNotice("تعذّر تشغيل صوت الفوز. اضغط تشغيل للمحاولة مجددًا، أو تابع اللعب بدون صوت.");
+      this.onNotice("تعذّر تشغيل صوت الفوز. اضغطي تشغيل أو تابعي بدون صوت.");
       this.onWinChange(this.winState);
       return false;
     }

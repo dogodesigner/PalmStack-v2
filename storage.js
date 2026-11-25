@@ -1,6 +1,7 @@
 import { LEVELS, DEFAULT_LEVEL } from "./config.js";
 
-export const RECORDS_KEY = "palmstack.records.v1";
+export const RECORDS_KEY = "palmstack.records.v2";
+const LEGACY_RECORDS_KEY = "palmstack.records.v1";
 const SETTINGS_KEY = "palmstack.settings.v1";
 const STARTERS = ["human", "computer"];
 const LIMIT = 10;
@@ -82,7 +83,11 @@ export function createStore(providedStorage) {
   function refresh() {
     const saved = read(RECORDS_KEY);
     if (saved?.version === 1) records = sanitizeRecords(saved.records);
-    else if (persistent) records = [];
+    else if (persistent) {
+      // Preserve the original v1 data; only unchanged difficulties migrate.
+      const legacy = read(LEGACY_RECORDS_KEY);
+      records = legacy?.version === 1 ? sanitizeRecords(legacy.records).filter(item => item.level !== "easy") : [];
+    }
     const preferences = read(SETTINGS_KEY);
     if (preferences?.version === 1) {
       settings = {

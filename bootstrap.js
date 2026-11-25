@@ -13,7 +13,7 @@
   connectionStatus();
   retry.addEventListener("click", () => window.location.reload());
   const slowLoad = setTimeout(() => {
-    message.textContent = "تحميل اللعبة يأخذ وقتًا أطول من المعتاد. يمكنك الانتظار أو إعادة تحميل الصفحة.";
+    message.textContent = "تحميل اللعبة يأخذ وقتًا أطول من المعتاد. انتظري أو أعيدي تحميل الصفحة.";
     retry.hidden = false;
   }, 12000);
   import("./game.js").then(() => {
@@ -23,7 +23,7 @@
   }).catch((error) => {
     clearTimeout(slowLoad);
     notice.classList.add("notice--error");
-    message.textContent = "تعذّر تجهيز اللعبة. تحقق من اتصالك ثم أعد تحميل الصفحة. إذا استمرت المشكلة، حاول لاحقًا.";
+    message.textContent = "تعذّر تجهيز اللعبة. تحققي من اتصالك وأعيدي تحميل الصفحة.";
     retry.hidden = false;
     console.error("Game initialization failed:", error);
   });

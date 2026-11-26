@@ -102,7 +102,7 @@ export function createStore(providedStorage) {
     get persistent() { return persistent; },
     get settings() { return { ...settings }; },
     refresh,
-    hasName(name) { const key = nameKey(name); return records.some(item => nameKey(item.name) === key) || (read("palmstack.names.v1") || []).includes(key); },
+    hasName(name) { const key = nameKey(name); return records.some(item => nameKey(item.name) === key) || (Array.isArray(read("palmstack.names.v1")) ? read("palmstack.names.v1") : []).includes(key); },
     rememberName(name) { const key = nameKey(name); if (!key) return; const saved = read("palmstack.names.v1"); const names = Array.isArray(saved) ? saved : []; if (!names.includes(key)) write("palmstack.names.v1", [...names, key]); },
     saveSettings(next) {
       settings = {

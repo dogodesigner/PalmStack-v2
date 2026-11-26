@@ -16,12 +16,16 @@
     message.textContent = "تحميل اللعبة يأخذ وقتًا أطول من المعتاد. انتظري أو أعيدي تحميل الصفحة.";
     retry.hidden = false;
   }, 12000);
-  import("./game.js?v=7.2").then(() => {
+  for(const id of ["boot-progress","startup-progress"]) byId(id).value=45;
+  import("./game.js?v=8").then(() => {
     clearTimeout(slowLoad);
+    for(const id of ["boot-progress","startup-progress"]) byId(id).value=100;
+    document.querySelector(".arcade-boot").hidden=true;
     notice.hidden = true;
     for (const id of ["start-button", "sound-toggle", "leaderboard-button"]) byId(id).disabled = false;
   }).catch((error) => {
     clearTimeout(slowLoad);
+    document.querySelector(".arcade-boot").hidden=true;
     notice.classList.add("notice--error");
     message.textContent = "تعذّر تجهيز اللعبة. تحققي من اتصالك وأعيدي تحميل الصفحة.";
     retry.hidden = false;

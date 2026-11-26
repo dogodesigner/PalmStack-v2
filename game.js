@@ -3,7 +3,7 @@ import {
   createBoard, getOpenRow, getGameResult, makeMove,
 } from "./rules.js";
 import { LEVELS, MEDIA, COPY } from "./config.js";
-import { cleanName, createStore, RECORDS_KEY } from "./storage.js?v=7.2";
+import { cleanName, createStore, RECORDS_KEY } from "./storage.js?v=8";
 
 import { SoundBank } from "./audio.js";
 import { Celebration } from "./effects.js";
@@ -436,7 +436,7 @@ async function fetchLeaderboard() { store.refresh(); renderLeaderboard(); }
 
 function updateSoundButton() {
   ui.sound.setAttribute("aria-pressed", String(sound.enabled));
-  ui.sound.textContent = sound.enabled ? "الصوت يعمل" : "الصوت مكتوم";
+  ui.sound.classList.toggle("muted", !sound.enabled);
   ui.sound.setAttribute("aria-label", sound.enabled ? "كتم الصوت" : "تشغيل الصوت");
   renderWinSound();
 }
@@ -501,13 +501,13 @@ ui.form.addEventListener("submit", (event) => {
   sound.play("click");
   const name = cleanName(ui.nameInput.value);
   store.refresh();
-  if (name && store.hasName(name)) { byId("duplicate-name").showModal(); return; }
+  if (name && store.hasName?.(name)) { byId("duplicate-name").showModal(); return; }
   beginNamedRound(name);
 });
 function beginNamedRound(name) {
   void sound.unlock().then(()=>sound.play("start"));
   state.name = name;
-  store.rememberName(name);
+  store.rememberName?.(name);
   state.level = Object.hasOwn(LEVELS, ui.level.value) ? ui.level.value : "easy";
   ui.humanName.textContent = state.name || "أنتِ";
   state.nextStarter = HUMAN;
@@ -587,13 +587,13 @@ window.addEventListener("online", () => { if (ui.leaderboard.open) void fetchLea
 function showPreview(col, player) {
   const preview = byId("coin-preview");
   preview.hidden = col < 0;
-  preview.style.setProperty("--selected", col);
+  preview.style.gridColumn = String(col + 1);
   preview.className = `coin-preview piece--${player === HUMAN ? "human" : "computer"}`;
 }
 function paintSelection() {
   const active = state.phase === "human";
   showPreview(active ? state.lastHumanColumn : -1, HUMAN);
-  columnButtons.forEach((b,i)=>b.classList.toggle("selected-column",active && i===state.lastHumanColumn));
+  columnButtons.forEach((b,i)=>b.classList.toggle("selected-column",active && i===state.lastHumanColumn)); cells.forEach(row=>row.forEach((cell,i)=>cell.classList.toggle("selected-cell",active && i===state.lastHumanColumn)));
   for (const id of ["move-left","move-right","move-drop"]) byId(id).disabled = !active;
 }
 function selectColumn(col) {
@@ -632,7 +632,7 @@ loadImage("side-left-image", MEDIA.sideLeft);
 loadImage("side-right-image", MEDIA.sideRight);
 
 // Original synthesized chiptune loop; opt-in and independent of game effects.
-const musicButton=byId("retro-music"); let musicOn=false,musicTimer=null,musicContext=null,musicGain=null,musicStep=0;
+const musicButton=ui.sound; let musicOn=false,musicTimer=null,musicContext=null,musicGain=null,musicStep=0;
 const melody=[72,76,79,76,74,77,81,77,72,76,79,84,81,79,76,74];
 function musicTick(){if(!musicOn||document.hidden||state.phase==="finished"||!sound.enabled||!musicContext)return;const t=musicContext.currentTime;for(const [note,vol,type] of [[melody[musicStep%16],.045,"square"],[48+[0,0,5,5,7,7,5,5][Math.floor(musicStep/2)%8],.045,"triangle"]]){const o=musicContext.createOscillator(),g=musicContext.createGain();o.type=type;o.frequency.value=440*2**((note-69)/12);g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.0001,t+.16);o.connect(g);g.connect(musicGain);o.start(t);o.stop(t+.18);}musicStep++;}
-musicButton.onclick=async()=>{musicOn=!musicOn;musicButton.setAttribute("aria-pressed",String(musicOn));musicButton.textContent="موسيقى الريترو: "+(musicOn?"تعمل":"متوقفة");if(musicOn){try{if(!musicContext){musicContext=new (window.AudioContext||window.webkitAudioContext)();musicGain=musicContext.createGain();musicGain.gain.value=.5;musicGain.connect(musicContext.destination);}await musicContext.resume();if(musicOn){clearInterval(musicTimer);musicTimer=setInterval(musicTick,230);musicTick();}}catch{musicOn=false;musicButton.setAttribute("aria-pressed","false");musicButton.textContent="الموسيقى غير متاحة";}}else{clearInterval(musicTimer);musicTimer=null;}};
+function syncMusic(){musicOn=sound.enabled; if(!musicOn){clearInterval(musicTimer);musicTimer=null;return;} try{if(!musicContext){musicContext=new (window.AudioContext||window.webkitAudioContext)();musicGain=musicContext.createGain();musicGain.gain.value=.5;musicGain.connect(musicContext.destination);}void musicContext.resume().then(()=>{if(musicOn){clearInterval(musicTimer);musicTimer=setInterval(musicTick,230);}}).catch(()=>{});}catch{}} ui.sound.addEventListener("click",syncMusic);
